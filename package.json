@@ -1,0 +1,21 @@
+{
+  "name": "twitch-marbles-autoplay",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "andy <a.simeon@gmail.com> (https://github.com/megadrive)",
+  "license": "ISC",
+  "dependencies": {
+    "axios": "^0.19.2",
+    "dotenv": "^8.2.0",
+    "eventemitter3": "^4.0.4",
+    "express": "^4.17.1",
+    "lodash": "^4.17.15",
+    "mz": "^2.7.0",
+    "tmi.js": "^1.5.0"
+  }
+}
