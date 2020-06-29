@@ -10,13 +10,20 @@ const { Client } = require("tmi.js");
 const MessageQueue = require("./MessageQueue");
 const { difference } = require("lodash");
 
+const { join } = require("path");
+const { readFileSync } = require("fs");
+
 class App extends EventEmitter3 {
-  constructor(options = {
-    startWhenReady: true,
-    tickInterval: 1000 * 60
-  }) {
+  constructor(options = {}) {
     super();
 
+    const defaults = {
+      startWhenReady: true,
+      tickInterval: 1000 * 60,
+      streamFilter: () => true,
+      usedCachedGameData: true
+    };
+    options = Object.assign(defaults, options);
     this.opts = options;
 
     /** axios instance */
@@ -30,6 +37,15 @@ class App extends EventEmitter3 {
 
     /** cached game id for Marbles */
     this.gameId = null;
+    if(this.usedCachedGameData) {
+      const cachedGameData = readFileSync(join("gameData.json"), "utf8");
+      if(cachedGameData) {
+        const parsed = JSON.parse(cachedGameData);
+        this.gameId = parsed.game_id;
+      }
+    }
+
+    this.streamFilterFunc = options.streamFilter;
 
     /** processed env variables for channels to stay joiend to */
     this.channelsToJoin = null;
@@ -55,6 +71,7 @@ class App extends EventEmitter3 {
 
     this.chat.on("message", (channel, tags, message, self) => {
       if(self) return;
+      if(!this.messageQueue.has(channel)) return;
 
       const queue = this.messageQueue.get(channel);
       queue.parse(message);
@@ -73,7 +90,7 @@ class App extends EventEmitter3 {
         password: process.env.TWITCH_OAUTH
       },
       channels: this.channelsToJoin
-    });    
+    });
     this.chat.setMaxListeners(50);
     await this.chat.connect();
 
@@ -86,7 +103,13 @@ class App extends EventEmitter3 {
       }
     });
     
-    await this.getGamesMetadata();
+    if(!this.gameId) {
+      await this.getGamesMetadata();
+    } else {
+      console.log("Using cached game data.");
+    }
+
+    this.firstRun = true;
 
     this._addListeners();
 
@@ -114,6 +137,7 @@ class App extends EventEmitter3 {
     try {
       await this.getCurrentStreamers();
       this.joinStreamChats();
+      this.firstRun = false;
     } catch(err) {
       console.error("Tick failed", err);
     }
@@ -122,11 +146,13 @@ class App extends EventEmitter3 {
   async getCurrentStreamers() {
     try {
       const { data } = await this.api(`/streams?game_id=${this.gameId}`);
-      const streamers = data.data.slice(0, 10);
+      const streamers = data.data;
 
       if(streamers.length) {
-        this.streamers = streamers.map(streamer => "#" + streamer.user_name.toLowerCase());
-        console.log(`Got ${streamers.length} streamers.`);
+        this.streamers = streamers
+          .filter(this.streamFilterFunc)
+          .map(streamer => "#" + streamer.user_name.toLowerCase());
+        console.log(`Got ${this.streamers.length} streamers. ${streamers.length} total.`);
       } else {
         throw Error("No streamers found.");
       }
@@ -136,21 +162,24 @@ class App extends EventEmitter3 {
   }
 
   joinStreamChats() {
-    console.log(`Parting fresh channels (${this.chat.channels.length})`);
-    
-    const newlyOffline = difference(this.chat.channels, this.streamers);
-    newlyOffline.forEach(streamer => {
-      if(this.channelsToJoin.some(channel => streamer !== channel)) {
-        this.chat.part(streamer);
-        console.log(`Parting ${streamer}`)
-      } else {
-        console.log(`Not parting ${streamer}, predefined.`)
-      }
-    });
+    if(!this.firstRun){
+      console.log(`Parting now-offline channels (${this.chat.channels.length})`);
+      const newlyOffline = difference(this.chat.channels, this.streamers);
+      newlyOffline.forEach(streamer => {
+        if(this.channelsToJoin.some(channel => streamer !== channel)) {
+          this.chat.part(streamer).catch(err => console.error("Couldn't part", err));
+          console.log(`[part] ${streamer}`)
+        } else {
+          console.log(`[not part] ${streamer}, predefined.`)
+        }
+      });
+    } else {
+      console.log("First run, not parting streams.");
+    }
 
     // Joining channels
     this.streamers.forEach(streamer => {
-      this.chat.join(streamer);
+      this.chat.join(streamer).catch(err => console.error("Error joining channel", err));
 
       // create a queue
       if(!this.messageQueue.has(streamer)) {
@@ -159,16 +188,14 @@ class App extends EventEmitter3 {
         });
         queue.on("trigger", data => {
           const { channel, message } = data;
-          console.log(`Attempting to play in ${channel}`);
+          console.log(`[${channel}] attempting to play`);
           this.chat.say(channel, message);
         });
         this.messageQueue.set(streamer, queue);
       }
 
-      console.log(`Joined ${streamer} chat`);
+      console.log(`[${streamer}] joined chat`);
     });
-    
-    console.log("Joined new streamers");
   }
 
   start() {

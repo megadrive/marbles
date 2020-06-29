@@ -4,17 +4,20 @@ const EventEmitter3 = require("eventemitter3");
 module.exports = class MessageQueue extends EventEmitter3 {
   constructor(options = {
     channel: "",
-    timeToLive: 15 * 1000,
-    numberOfTriggerMessages: 3,
-    triggerMessage: "!play",
-    cooldown: 2 * 60 * 1000 // 2 minutes
+    timeToLive: 0,
+    numberOfTriggerMessages: 0,
+    triggerMessage: "",
+    cooldown: 0,
+    verbose: false
   }) {
     super();
 
     const defaults = {
       timeToLive: 10 * 1000,
       numberOfTriggerMessages: 3,
-      triggerMessage: "!play"
+      triggerMessage: "!play",
+      cooldown: 2 * 60 * 1000, // 2 minutes
+      verbose: false
     };
 
     options = Object.assign(defaults, options);
@@ -41,9 +44,11 @@ module.exports = class MessageQueue extends EventEmitter3 {
           channel: this.channel,
           message: this.opts.triggerMessage
         });
+      } else {
+        console.log(`[flush] [${this.channel}] got ${numOfTriggers}/${this.opts.numberOfTriggerMessages} triggers`);
       }
 
-      console.log(`${this.channel} flushing`);
+      console.log(`[flush] ${this.channel}`);
     }, this.opts.timeToLive);
   }
 
@@ -55,6 +60,6 @@ module.exports = class MessageQueue extends EventEmitter3 {
     const [parse, ] = message.split(/ /g);
     this.messages.push(parse);
 
-    console.log(`Parsed message ${parse} for ${this.channel}`)
+    if(this.opts.verbose) console.log(`[parsed] [${this.channel}] ${parse}`)
   }
 }
