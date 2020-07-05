@@ -2,21 +2,23 @@
 const EventEmitter3 = require("eventemitter3");
 
 module.exports = class MessageQueue extends EventEmitter3 {
-  constructor(options = {
-    channel: "",
-    timeToLive: 0,
-    numberOfTriggerMessages: 0,
-    triggerMessage: "",
-    cooldown: 0,
-    verbose: false
-  }) {
+  /**
+   * 
+   * @param {object} options 
+   * @param {number} options.flushDelay How long in ms in between flushes
+   * @param {number} options.numberOfTriggerMessages Number of message that will trigger a !play
+   * @param {number} options.triggerMessage The message to send. default: "!play"
+   * @param {number} options.cooldown Cooldown after message triggered in ms
+   * @param {number} options.verbose Verbose debugging
+   */
+  constructor(options = {}) {
     super();
 
     const defaults = {
-      timeToLive: 10 * 1000,
-      numberOfTriggerMessages: 3,
+      flushDelay: 10 * 1000,
+      numberOfTriggerMessages: 5,
       triggerMessage: "!play",
-      cooldown: 2 * 60 * 1000, // 2 minutes
+      cooldown: 3 * 60 * 1000, // 3 minutes
       verbose: false
     };
 
@@ -49,7 +51,7 @@ module.exports = class MessageQueue extends EventEmitter3 {
       }
 
       console.log(`[flush] ${this.channel}`);
-    }, this.opts.timeToLive);
+    }, this.opts.flushDelay);
   }
 
   get onCooldown() {
